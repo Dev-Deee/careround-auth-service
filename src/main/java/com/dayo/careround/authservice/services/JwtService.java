@@ -1,6 +1,7 @@
 package com.dayo.careround.authservice.services;
 
 import com.dayo.careround.authservice.config.JwtProperties;
+import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -51,5 +52,13 @@ public class JwtService {
                         )
                 }
         );
+    }
+
+    public Claims verifyToken(String token) {
+        return Jwts.parser()
+                .verifyWith(rsaPublicKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload();
     }
 }

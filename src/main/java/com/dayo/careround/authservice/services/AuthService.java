@@ -1,12 +1,24 @@
 package com.dayo.careround.authservice.services;
 
+import com.dayo.careround.authservice.config.JwtProperties;
+import com.dayo.careround.authservice.data.models.AuthUser;
+import com.dayo.careround.authservice.data.models.OutboxEvent;
 import com.dayo.careround.authservice.data.models.RefreshToken;
+import com.dayo.careround.authservice.data.models.enums.UserStatus;
+import com.dayo.careround.authservice.data.repositories.AuthUserRepository;
+import com.dayo.careround.authservice.data.repositories.OutboxEventRepository;
 import com.dayo.careround.authservice.data.repositories.RefreshTokenRepository;
+import com.dayo.careround.authservice.dto.request.ChangePasswordRequest;
 import com.dayo.careround.authservice.dto.request.LoginRequest;
 import com.dayo.careround.authservice.dto.request.RefreshRequest;
+import com.dayo.careround.authservice.dto.request.RegisterRequest;
 import com.dayo.careround.authservice.dto.response.AuthResponse;
-import com.dayo.careround.authservice.dto.response.UserCredentialResponse;
-import com.dayo.careround.authservice.config.JwtProperties;
+import com.dayo.careround.authservice.exception.AccountNotActiveException;
+import com.dayo.careround.authservice.exception.InvalidCredentialsException;
+import com.dayo.careround.authservice.exception.TokenException;
+import com.dayo.careround.authservice.exception.UserAlreadyExistsException;
+import com.dayo.careround.authservice.utils.AuthMapper;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -15,6 +27,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -22,70 +36,80 @@ import java.util.UUID;
 public class AuthService {
 
     private final JwtService jwtService;
-    private final UserServiceClient userServiceClient;
+    private final AuthUserRepository authUserRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final OutboxEventRepository outboxEventRepository;
     private final JwtProperties jwtProperties;
     private final BCryptPasswordEncoder passwordEncoder;
 
     public AuthResponse login(LoginRequest request) {
-        // 1. Fetch user from user-service
-        UserCredentialResponse user = userServiceClient.findByIdentifier(request.getIdentifier());
+        AuthUser user = authUserRepository
+                .findByEmailOrPhoneNumber(request.identifier(), request.identifier())
+                .orElseThrow(InvalidCredentialsException::new);
 
-        // 2. Check user exists and is active
-        if (user == null) {
-            throw new RuntimeException("Invalid credentials");
-        }
-        if (!"ACTIVE".equals(user.getStatus())) {
-            throw new RuntimeException("Account is not active");
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new AccountNotActiveException();
         }
 
-        // 3. Verify password — always run even if user not found to prevent timing attacks
-        if (!passwordEncoder.matches(request.getPassword(), user.getPasswordHash())) {
-            throw new RuntimeException("Invalid credentials");
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException();
         }
 
-        // 4. Generate access token
         String accessToken = jwtService.generateAccessToken(
                 user.getId(),
-                user.getRole(),
+                user.getRole().name(),
                 user.getGrade(),
                 user.getAssignedWardId()
         );
 
-        // 5. Generate and store refresh token
         String rawRefreshToken = UUID.randomUUID().toString();
         String tokenHash = hashToken(rawRefreshToken);
 
-        RefreshToken refreshToken = new RefreshToken();
-        refreshToken.setTokenHash(tokenHash);
-        refreshToken.setUserId(user.getId());
-        refreshToken.setUserRole(user.getRole());
-        refreshToken.setIssuedAt(Instant.now());
-        refreshToken.setExpiresAt(Instant.now().plusMillis(jwtProperties.getRefreshTokenExpiryMs()));
+        RefreshToken refreshToken = AuthMapper.toRefreshToken(
+                tokenHash, user.getId(), user.getRole().name(), jwtProperties.getRefreshTokenExpiryMs());
         refreshTokenRepository.save(refreshToken);
 
-        return AuthResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(rawRefreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtProperties.getAccessTokenExpiryMs() / 1000)
-                .build();
+        return AuthMapper.toAuthResponse(accessToken, rawRefreshToken, jwtProperties.getAccessTokenExpiryMs());
+    }
+
+    public void register(RegisterRequest request) {
+        if (authUserRepository.existsByEmail(request.email())) {
+            throw new UserAlreadyExistsException("Email already registered");
+        }
+        if (authUserRepository.existsByPhoneNumber(request.phoneNumber())) {
+            throw new UserAlreadyExistsException("Phone number already registered");
+        }
+
+        AuthUser user = new AuthUser();
+        user.setEmail(request.email());
+        user.setPhoneNumber(request.phoneNumber());
+        user.setPasswordHash(passwordEncoder.encode(request.password()));
+        user.setRole(request.role());
+        user.setGrade(request.grade());
+        user.setAssignedWardId(request.assignedWardId());
+        authUserRepository.save(user);
+
+        String payload = buildPayload(user, request);
+        OutboxEvent outboxEvent = new OutboxEvent();
+        outboxEvent.setIdempotencyKey(user.getId() + "-user-registered");
+        outboxEvent.setEventType("user.registered");
+        outboxEvent.setPayload(payload);
+        outboxEventRepository.save(outboxEvent);
     }
 
     public AuthResponse refresh(RefreshRequest request) {
-        String tokenHash = hashToken(request.getRefreshToken());
+        String tokenHash = hashToken(request.refreshToken());
 
         RefreshToken stored = refreshTokenRepository.findByTokenHash(tokenHash)
-                .orElseThrow(() -> new RuntimeException("Invalid refresh token"));
+                .orElseThrow(() -> new TokenException("Invalid refresh token"));
 
         if (stored.isRevoked()) {
-            throw new RuntimeException("Refresh token has been revoked");
+            throw new TokenException("Refresh token has been revoked");
         }
         if (stored.getExpiresAt().isBefore(Instant.now())) {
-            throw new RuntimeException("Refresh token has expired");
+            throw new TokenException("Refresh token has expired");
         }
 
-        // Rotate — revoke old, issue new
         stored.setRevoked(true);
         stored.setRevokedAt(Instant.now());
         refreshTokenRepository.save(stored);
@@ -93,27 +117,21 @@ public class AuthService {
         String newRawRefreshToken = UUID.randomUUID().toString();
         String newTokenHash = hashToken(newRawRefreshToken);
 
-        RefreshToken newRefreshToken = new RefreshToken();
-        newRefreshToken.setTokenHash(newTokenHash);
-        newRefreshToken.setUserId(stored.getUserId());
-        newRefreshToken.setUserRole(stored.getUserRole());
-        newRefreshToken.setIssuedAt(Instant.now());
-        newRefreshToken.setExpiresAt(Instant.now().plusMillis(jwtProperties.getRefreshTokenExpiryMs()));
+        RefreshToken newRefreshToken = AuthMapper.toRefreshToken(
+                newTokenHash, stored.getUserId(), stored.getUserRole(), jwtProperties.getRefreshTokenExpiryMs());
         refreshTokenRepository.save(newRefreshToken);
 
+        AuthUser user = authUserRepository.findById(stored.getUserId())
+                .orElseThrow(() -> new TokenException("User no longer exists"));
+
         String newAccessToken = jwtService.generateAccessToken(
-                stored.getUserId(),
-                stored.getUserRole(),
-                null,
-                null
+                user.getId(),
+                user.getRole().name(),
+                user.getGrade(),
+                user.getAssignedWardId()
         );
 
-        return AuthResponse.builder()
-                .accessToken(newAccessToken)
-                .refreshToken(newRawRefreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtProperties.getAccessTokenExpiryMs() / 1000)
-                .build();
+        return AuthMapper.toAuthResponse(newAccessToken, newRawRefreshToken, jwtProperties.getAccessTokenExpiryMs());
     }
 
     public void logout(String rawRefreshToken) {
@@ -123,6 +141,41 @@ public class AuthService {
             token.setRevokedAt(Instant.now());
             refreshTokenRepository.save(token);
         });
+    }
+
+    public void changePassword(UUID userId, ChangePasswordRequest request) {
+        AuthUser user = authUserRepository.findById(userId)
+                .orElseThrow(() -> new InvalidCredentialsException());
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new InvalidCredentialsException();
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(request.newPassword()));
+        authUserRepository.save(user);
+
+        // Revoke all existing refresh tokens — force re-login everywhere
+        refreshTokenRepository.deleteAllByUserId(userId);
+    }
+
+    private String buildPayload(AuthUser user, RegisterRequest request) {
+        try {
+            Map<String, Object> payload = new HashMap<>();
+            payload.put("id", user.getId().toString());
+            payload.put("publicId", user.getPublicId().toString());
+            payload.put("firstName", request.firstName());
+            payload.put("lastName", request.lastName());
+            payload.put("email", user.getEmail());
+            payload.put("phoneNumber", user.getPhoneNumber());
+            payload.put("role", user.getRole().name());
+            payload.put("grade", user.getGrade());
+            payload.put("assignedWardId", user.getAssignedWardId() != null ? user.getAssignedWardId().toString() : null);
+            payload.put("specialization", request.specialization());
+            payload.put("licenseNumber", request.licenseNumber());
+            return new ObjectMapper().writeValueAsString(payload);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to build event payload", e);
+        }
     }
 
     private String hashToken(String token) {
