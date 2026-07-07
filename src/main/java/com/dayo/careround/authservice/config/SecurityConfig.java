@@ -30,8 +30,8 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/.well-known/jwks.json",
                                 "/api/v1/auth/login",
-                                "/api/v1/auth/register",
                                 "/api/v1/auth/refresh",
+                                "/api/v1/auth/activate-account",
                                 "/actuator/health",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"

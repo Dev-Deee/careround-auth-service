@@ -16,7 +16,7 @@ import java.time.Instant;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class OutboxPoller {
+public class OutboxEventPublisher {
 
     private final OutboxEventRepository outboxEventRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;

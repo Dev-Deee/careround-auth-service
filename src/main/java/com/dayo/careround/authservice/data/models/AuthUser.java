@@ -1,10 +1,13 @@
 package com.dayo.careround.authservice.data.models;
 
+import com.dayo.careround.authservice.data.models.enums.AdminPermission;
 import com.dayo.careround.authservice.data.models.enums.UserRole;
 import com.dayo.careround.authservice.data.models.enums.UserStatus;
 import jakarta.persistence.*;
 import lombok.Data;
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 @Data
@@ -28,7 +31,7 @@ public class AuthUser {
     @Column(nullable = false, unique = true)
     private String phoneNumber;
 
-    @Column(nullable = false)
+    @Column
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
@@ -37,6 +40,15 @@ public class AuthUser {
 
     @Column
     private String grade; // DoctorGrade or NurseGrade depending on role
+
+    @Column
+    private String pendingEmail;
+
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "auth_user_permissions", joinColumns = @JoinColumn(name = "auth_user_id"))
+    @Enumerated(EnumType.STRING)
+    @Column(name = "permission")
+    private Set<AdminPermission> permissions = new HashSet<>();
 
     @Column
     private UUID assignedWardId;
