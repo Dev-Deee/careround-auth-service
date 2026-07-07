@@ -1,20 +1,27 @@
 package com.dayo.careround.authservice.controllers;
 
-import com.dayo.careround.authservice.dto.request.ChangePasswordRequest;
-import com.dayo.careround.authservice.dto.request.LoginRequest;
-import com.dayo.careround.authservice.dto.request.RefreshRequest;
-import com.dayo.careround.authservice.dto.request.RegisterRequest;
+import com.dayo.careround.authservice.data.models.AuthUser;
+import com.dayo.careround.authservice.data.models.OutboxEvent;
+import com.dayo.careround.authservice.data.models.enums.OutboxStatus;
+import com.dayo.careround.authservice.data.repositories.AuthUserRepository;
+import com.dayo.careround.authservice.data.repositories.OutboxEventRepository;
+import com.dayo.careround.authservice.dto.request.*;
 import com.dayo.careround.authservice.dto.response.AuthResponse;
+import com.dayo.careround.authservice.exception.InvalidCredentialsException;
 import com.dayo.careround.authservice.security.CareRoundPrincipal;
 import com.dayo.careround.authservice.services.AuthService;
+import com.dayo.careround.authservice.services.OutboxService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/v1/auth")
@@ -22,19 +29,40 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final AuthUserRepository authUserRepository;
+    private final OutboxEventRepository outboxEventRepository;
+    private final OutboxService outboxService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(authService.login(request));
     }
 
-    @PostMapping("/register")
-    public ResponseEntity<Map<String, String>> register(@Valid @RequestBody RegisterRequest request) {
-        authService.register(request);
+    @PostMapping("/admin/create-user")
+    @PreAuthorize("hasAuthority('PERM_CREATE_USER') or hasAuthority('PERM_GRANT_PERMISSIONS')")
+    public ResponseEntity<Map<String, String>> createUser(
+            @Valid @RequestBody RegisterRequest request,
+            @AuthenticationPrincipal CareRoundPrincipal principal) {
+        AuthUser creator = authUserRepository.findById(principal.userId())
+                .orElseThrow(InvalidCredentialsException::new);
+        authService.register(request, creator);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
-                "message", "Registration successful. Profile setup may take a moment.",
-                "status", "PENDING_PROFILE_SETUP"
+                "message", "Account created. Activation email sent.",
+                "status", "PENDING_VERIFICATION"
         ));
+    }
+
+    @PostMapping("/activate-account")
+    public ResponseEntity<Void> activateAccount(@Valid @RequestBody ActivateAccountRequest request) {
+        authService.activateAccount(request.token(), request.password());
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/admin/resend-activation")
+    @PreAuthorize("hasAuthority('PERM_CREATE_USER')")
+    public ResponseEntity<Void> resendActivation(@Valid @RequestBody ResendActivationRequest request) {
+        authService.resendActivation(request.email());
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/refresh")
@@ -53,6 +81,32 @@ public class AuthController {
             @Valid @RequestBody ChangePasswordRequest request,
             @AuthenticationPrincipal CareRoundPrincipal principal) {
         authService.changePassword(principal.userId(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PutMapping("/change-email")
+    public ResponseEntity<Void> changeEmail(
+            @Valid @RequestBody ChangeEmailRequest request,
+            @AuthenticationPrincipal CareRoundPrincipal principal) {
+        authService.changeEmail(principal.userId(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/confirm-email-change")
+    public ResponseEntity<Void> confirmEmailChange(@Valid @RequestBody ConfirmEmailChangeRequest request) {
+        authService.confirmEmailChange(request.token());
+        return ResponseEntity.noContent().build();
+    }
+    @GetMapping("/admin/outbox/dead-letters")
+    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT_LOGS')")
+    public ResponseEntity<List<OutboxEvent>> listDeadLetters() {
+        return ResponseEntity.ok(outboxEventRepository.findByStatus(OutboxStatus.DEAD_LETTER));
+    }
+
+    @PostMapping("/admin/outbox/{id}/retry")
+    @PreAuthorize("hasAuthority('PERM_MANAGE_SYSTEM_CONFIG')")
+    public ResponseEntity<Void> retryDeadLetter(@PathVariable UUID id) {
+        outboxService.retryDeadLetter(id);
         return ResponseEntity.noContent().build();
     }
 }
