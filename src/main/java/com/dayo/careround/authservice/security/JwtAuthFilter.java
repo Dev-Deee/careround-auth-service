@@ -7,8 +7,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
-import org.springframework.core.annotation.Order;
-import org.springframework.lang.NonNull;
+import org.jspecify.annotations.NonNull;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -16,6 +15,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -50,17 +50,21 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             String wardIdStr = claims.get("assignedWardId", String.class);
             UUID assignedWardId = wardIdStr != null ? UUID.fromString(wardIdStr) : null;
 
+            @SuppressWarnings("unchecked")
+            List<String> permissionClaims = claims.get("permissions", List.class);
+
             CareRoundPrincipal principal = new CareRoundPrincipal(userId, role, grade, assignedWardId);
 
-            List<GrantedAuthority> authorities = List.of(
-                    new SimpleGrantedAuthority("ROLE_" + role)
-            );
-            // grade authority added only if present (not all roles carry one the same way)
+            List<GrantedAuthority> authorities = new ArrayList<>();
+            authorities.add(new SimpleGrantedAuthority("ROLE_" + role));
+
             if (grade != null) {
-                authorities = List.of(
-                        new SimpleGrantedAuthority("ROLE_" + role),
-                        new SimpleGrantedAuthority("GRADE_" + grade)
-                );
+                authorities.add(new SimpleGrantedAuthority("GRADE_" + grade));
+            }
+
+            if (permissionClaims != null) {
+                permissionClaims.forEach(p ->
+                        authorities.add(new SimpleGrantedAuthority("PERM_" + p)));
             }
 
             JwtAuthenticationToken authToken = new JwtAuthenticationToken(principal, authorities);
