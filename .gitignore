@@ -30,7 +30,7 @@ build/
 !**/src/test/**/build/
 
 ### VS Code ###
-.vscode/
-.env
 src/main/resources/keys/
 
+config.bat
+node_modules
