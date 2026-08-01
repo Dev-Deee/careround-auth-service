@@ -71,7 +71,6 @@ public class AuthMapper {
         payload.put("grade", request.grade());
         payload.put("specialization", request.specialization());
         payload.put("licenseNumber", request.licenseNumber());
-        payload.put("activationToken", activationToken);
         return payload;
     }
 
@@ -79,7 +78,6 @@ public class AuthMapper {
         Map<String, Object> payload = new HashMap<>();
         payload.put("userId", user.getId().toString());
         payload.put("email", user.getEmail());
-        payload.put("activationToken", activationToken);
         return payload;
     }
 }
