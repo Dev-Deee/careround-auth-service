@@ -10,7 +10,7 @@ import com.dayo.careround.authservice.dto.response.AuthResponse;
 import com.dayo.careround.authservice.exception.InvalidCredentialsException;
 import com.dayo.careround.authservice.security.CareRoundPrincipal;
 import com.dayo.careround.authservice.services.AuthService;
-import com.dayo.careround.authservice.services.OutboxService;
+import com.dayo.careround.authservice.services.OutboxRecoveryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -31,7 +31,7 @@ public class AuthController {
     private final AuthService authService;
     private final AuthUserRepository authUserRepository;
     private final OutboxEventRepository outboxEventRepository;
-    private final OutboxService outboxService;
+    private final OutboxRecoveryService outboxRecoveryService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -106,7 +106,14 @@ public class AuthController {
     @PostMapping("/admin/outbox/{id}/retry")
     @PreAuthorize("hasAuthority('PERM_MANAGE_SYSTEM_CONFIG')")
     public ResponseEntity<Void> retryDeadLetter(@PathVariable UUID id) {
-        outboxService.retryDeadLetter(id);
+        outboxRecoveryService.retryDeadLetter(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/admin/pending-account/{userId}")
+    @PreAuthorize("hasAuthority('PERM_DEACTIVATE_USER')")
+    public ResponseEntity<Void> cancelPendingAccount(@PathVariable UUID userId) {
+        authService.cancelPendingAccount(userId);
         return ResponseEntity.noContent().build();
     }
 }

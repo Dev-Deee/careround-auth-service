@@ -13,7 +13,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
-public class OutboxService {
+public class OutboxRecoveryService {
 
     private final OutboxEventRepository outboxEventRepository;
 
