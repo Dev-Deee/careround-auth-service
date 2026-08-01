@@ -13,11 +13,14 @@ import com.dayo.careround.authservice.data.repositories.VerificationTokenReposit
 import com.dayo.careround.authservice.dto.request.*;
 import com.dayo.careround.authservice.dto.response.AuthResponse;
 import com.dayo.careround.authservice.exception.*;
+import com.dayo.careround.authservice.grpc.LicenseVerificationClient;
 import com.dayo.careround.authservice.utils.AuthMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
@@ -27,6 +30,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Base64;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -41,7 +46,10 @@ public class AuthService {
     private final OutboxEventRepository outboxEventRepository;
     private final JwtProperties jwtProperties;
     private final BCryptPasswordEncoder passwordEncoder;
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final StringRedisTemplate redisTemplate;
+    private final LicenseVerificationClient licenseVerificationClient;
+    private final ObjectMapper objectMapper;
+
 
     // ---------------------------------------------------------------
     // LOGIN
@@ -100,6 +108,10 @@ public class AuthService {
         }
         if (authUserRepository.existsByPhoneNumber(request.phoneNumber())) {
             throw new UserAlreadyExistsException("Phone number already registered");
+        }
+        if ((request.role() == UserRole.DOCTOR || request.role() == UserRole.NURSE)
+                && licenseVerificationClient.licenseNumberExists(request.licenseNumber())) {
+            throw new UserAlreadyExistsException("This license number is already registered");
         }
 
         AuthUser newUser = AuthMapper.toAuthUser(request);
@@ -274,11 +286,39 @@ public class AuthService {
     }
 
     // ---------------------------------------------------------------
+    // CANCEL AND DELETE PENDING ACCOUNT
+    // ---------------------------------------------------------------
+
+    @Transactional
+    public void cancelPendingAccount(UUID userId) {
+        AuthUser user = authUserRepository.findById(userId)
+                .orElseThrow(() -> new UserNotFoundException("No user with that id"));
+
+        if (user.getStatus() != UserStatus.PENDING_VERIFICATION) {
+            throw new AccountNotCancellableException(
+                    "Only a PENDING_VERIFICATION account can be cancelled — current status: " + user.getStatus());
+        }
+
+        verificationTokenRepository.deleteAllByUserId(userId);
+        redisTemplate.delete("activation-token:" + userId);
+
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("userId", userId.toString());
+
+        outboxEventRepository.save(buildOutboxEvent(
+                "user-registration-cancelled-" + userId,
+                "user.registration_cancelled",
+                serialize(payload)));
+
+        authUserRepository.delete(user);
+    }
+
+    // ---------------------------------------------------------------
     // PRIVATE HELPERS — verification issuing (split events, mapper-driven)
     // ---------------------------------------------------------------
 
     private void issueRegistrationVerification(AuthUser user, RegisterRequest request) {
-        String rawToken = createAndLogActivationToken(user, Duration.ofHours(1));
+        String rawToken = createAndStashActivationToken(user, Duration.ofHours(1));
         outboxEventRepository.save(buildOutboxEvent(
                 "user-registered-" + user.getId(),
                 "user.registered",
@@ -286,14 +326,14 @@ public class AuthService {
     }
 
     private void issueResendVerification(AuthUser user) {
-        String rawToken = createAndLogActivationToken(user, Duration.ofMinutes(30));
+        String rawToken = createAndStashActivationToken(user, Duration.ofMinutes(30));
         outboxEventRepository.save(buildOutboxEvent(
                 "verification-resent-" + user.getId() + "-" + Instant.now().toEpochMilli(),
                 "user.verification_resent",
                 serialize(AuthMapper.toVerificationResentPayload(user, rawToken))));
     }
 
-    private String createAndLogActivationToken(AuthUser user, Duration expiry) {
+    private String createAndStashActivationToken(AuthUser user, Duration expiry) {
         String rawToken = UUID.randomUUID().toString();
 
         VerificationToken vt = new VerificationToken();
@@ -303,8 +343,13 @@ public class AuthService {
         vt.setExpiresAt(Instant.now().plus(expiry));
         verificationTokenRepository.save(vt);
 
-        log.info("EMAIL VERIFICATION LINK for {}: http://localhost:8081/api/v1/auth/activate-account?token={}",
-                user.getEmail(), rawToken);
+        // Temporarily hold the RAW token in Redis, keyed by userId, so notification-service
+        // can retrieve it via gRPC — the hash stored above can never be reversed back to this.
+        redisTemplate.opsForValue().set(
+                "activation-token:" + user.getId(),
+                rawToken,
+                expiry
+        );
 
         return rawToken;
     }
