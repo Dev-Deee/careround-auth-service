@@ -125,13 +125,7 @@ public class AuthService {
 
     @Transactional
     public void activateAccount(String rawToken, String newPassword) {
-        VerificationToken vt = verificationTokenRepository
-                .findByTokenHashAndPurpose(hashToken(rawToken), VerificationTokenPurpose.ACCOUNT_ACTIVATION)
-                .orElseThrow(() -> new InvalidVerificationTokenException("Invalid or expired verification token"));
-
-        if (vt.isUsed() || vt.getExpiresAt().isBefore(Instant.now())) {
-            throw new InvalidVerificationTokenException("Invalid or expired verification token");
-        }
+        VerificationToken vt = findUsableActivationToken(rawToken);
 
         AuthUser user = authUserRepository.findById(vt.getUserId())
                 .orElseThrow(() -> new InvalidVerificationTokenException("Invalid or expired verification token"));
@@ -142,6 +136,22 @@ public class AuthService {
 
         vt.setUsed(true);
         verificationTokenRepository.save(vt);
+    }
+
+    // Used by the emailed link's set-password page: rejects unknown, used or expired tokens up front.
+    public void checkActivationToken(String rawToken) {
+        findUsableActivationToken(rawToken);
+    }
+
+    private VerificationToken findUsableActivationToken(String rawToken) {
+        VerificationToken vt = verificationTokenRepository
+                .findByTokenHashAndPurpose(hashToken(rawToken), VerificationTokenPurpose.ACCOUNT_ACTIVATION)
+                .orElseThrow(() -> new InvalidVerificationTokenException("Invalid or expired verification token"));
+
+        if (vt.isUsed() || vt.getExpiresAt().isBefore(Instant.now())) {
+            throw new InvalidVerificationTokenException("Invalid or expired verification token");
+        }
+        return vt;
     }
 
     // ---------------------------------------------------------------
