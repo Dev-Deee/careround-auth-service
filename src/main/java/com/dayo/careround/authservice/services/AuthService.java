@@ -328,22 +328,23 @@ public class AuthService {
     // ---------------------------------------------------------------
 
     private void issueRegistrationVerification(AuthUser user, RegisterRequest request) {
-        String rawToken = createAndStashActivationToken(user, Duration.ofHours(1));
+        // The token stays in Redis/DB; notification-service fetches the link over gRPC, never via Kafka.
+        createAndStashActivationToken(user, Duration.ofHours(1));
         outboxEventRepository.save(buildOutboxEvent(
                 "user-registered-" + user.getId(),
                 "user.registered",
-                serialize(AuthMapper.toUserRegisteredPayload(user, request, rawToken))));
+                serialize(AuthMapper.toUserRegisteredPayload(user, request))));
     }
 
     private void issueResendVerification(AuthUser user) {
-        String rawToken = createAndStashActivationToken(user, Duration.ofMinutes(30));
+        createAndStashActivationToken(user, Duration.ofMinutes(30));
         outboxEventRepository.save(buildOutboxEvent(
                 "verification-resent-" + user.getId() + "-" + Instant.now().toEpochMilli(),
                 "user.verification_resent",
-                serialize(AuthMapper.toVerificationResentPayload(user, rawToken))));
+                serialize(AuthMapper.toVerificationResentPayload(user))));
     }
 
-    private String createAndStashActivationToken(AuthUser user, Duration expiry) {
+    private void createAndStashActivationToken(AuthUser user, Duration expiry) {
         String rawToken = UUID.randomUUID().toString();
 
         VerificationToken vt = new VerificationToken();
@@ -360,8 +361,6 @@ public class AuthService {
                 rawToken,
                 expiry
         );
-
-        return rawToken;
     }
 
     private OutboxEvent buildOutboxEvent(String idempotencyKey, String eventType, String payload) {

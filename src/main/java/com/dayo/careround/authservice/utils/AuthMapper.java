@@ -60,7 +60,7 @@ public class AuthMapper {
     // AuthUser + RegisterRequest -> Kafka event payloads
     // ---------------------------------------------------------------
 
-    public static Map<String, Object> toUserRegisteredPayload(AuthUser user, RegisterRequest request, String activationToken) {
+    public static Map<String, Object> toUserRegisteredPayload(AuthUser user, RegisterRequest request) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("userId", user.getId().toString());
         payload.put("publicId", user.getPublicId().toString());
@@ -74,7 +74,7 @@ public class AuthMapper {
         return payload;
     }
 
-    public static Map<String, Object> toVerificationResentPayload(AuthUser user, String activationToken) {
+    public static Map<String, Object> toVerificationResentPayload(AuthUser user) {
         Map<String, Object> payload = new HashMap<>();
         payload.put("userId", user.getId().toString());
         payload.put("email", user.getEmail());
