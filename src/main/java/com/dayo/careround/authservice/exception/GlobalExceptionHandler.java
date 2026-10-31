@@ -52,6 +52,11 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
+    @ExceptionHandler(LicenseNumberRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handleLicenseNumberRequired(LicenseNumberRequiredException ex) {
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidStateException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidState(InvalidStateException ex) {
         return buildResponse(HttpStatus.CONFLICT, ex.getMessage());
