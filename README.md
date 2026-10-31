@@ -24,6 +24,15 @@ notification-service), DB `careround_auth_db`, Redis for activation tokens.
   `AUDIT ward reassignment: userId=… role=… from=<old> to=<new> by=<admin userId>`.
 - `userId` is the account id (the JWT `sub`).
 
+## Errors
+
+Every error uses the body `{"status", "error", "message", "timestamp"}`.
+
+- A path no endpoint maps (e.g. a collection root with a trailing slash, or a wrong sub-path) → **404**
+  `No endpoint <METHOD> <path>`. A wrong HTTP method on a mapped path → 405, unsupported content type → 415,
+  malformed JSON → 400.
+- Anything unexpected → 500 with a generic message; the exception is logged at ERROR with its stack trace.
+
 ## Environment variables
 
 Copy `.env.example` to `.env` (gitignored, never committed) and fill in real values; plain environment variables work too. Names only:
