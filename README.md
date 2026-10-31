@@ -11,7 +11,7 @@ notification-service), DB `careround_auth_db`, Redis for activation tokens.
 
 ## Environment variables
 
-Read from `.env` (gitignored, never committed) or the environment. Names only:
+Copy `.env.example` to `.env` (gitignored, never committed) and fill in real values; plain environment variables work too. Names only:
 
 | Variable | Purpose |
 |---|---|
