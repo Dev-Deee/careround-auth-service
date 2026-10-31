@@ -3,13 +3,14 @@ package com.dayo.careround.authservice.data.repositories;
 import com.dayo.careround.authservice.data.models.AuthUser;
 import com.dayo.careround.authservice.data.models.enums.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
-public interface AuthUserRepository extends JpaRepository<AuthUser, UUID> {
+public interface AuthUserRepository extends JpaRepository<AuthUser, UUID>, JpaSpecificationExecutor<AuthUser> {
     Optional<AuthUser>findByEmailOrPhoneNumber(String email, String phoneNumber);
     Optional<AuthUser> findByEmail(String email);
     Optional<AuthUser> findByPublicId(UUID publicId);

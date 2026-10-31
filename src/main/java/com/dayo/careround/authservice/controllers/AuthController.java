@@ -5,7 +5,12 @@ import com.dayo.careround.authservice.data.models.enums.OutboxStatus;
 import com.dayo.careround.authservice.data.repositories.AuthUserRepository;
 import com.dayo.careround.authservice.data.repositories.OutboxEventRepository;
 import com.dayo.careround.authservice.dto.request.*;
+import com.dayo.careround.authservice.data.models.enums.UserRole;
+import com.dayo.careround.authservice.data.models.enums.UserStatus;
+import com.dayo.careround.authservice.dto.response.AdminUserResponse;
 import com.dayo.careround.authservice.dto.response.AuthResponse;
+import com.dayo.careround.authservice.dto.response.PageResponse;
+import com.dayo.careround.authservice.services.AdminUserQueryService;
 import com.dayo.careround.authservice.dto.response.OutboxDeadLetterResponse;
 import com.dayo.careround.authservice.dto.response.WardAssignmentResponse;
 import com.dayo.careround.authservice.dto.response.WardProblemsResponse;
@@ -36,6 +41,7 @@ public class AuthController {
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxRecoveryService outboxRecoveryService;
     private final WardAssignmentService wardAssignmentService;
+    private final AdminUserQueryService adminUserQueryService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -129,6 +135,19 @@ public class AuthController {
     }
 
     // DOCTOR/NURSE accounts with no ward or a ward ward-service does not know; capped at WARD_PROBLEMS_CAP.
+    // Staff accounts for the admin console: any ADMIN (no specific permission). role/status/q optional;
+    // q = part of the email or the start of the phone number. Newest first; {items, page, size, total}.
+    @GetMapping("/admin/users")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PageResponse<AdminUserResponse>> listUsers(
+            @RequestParam(required = false) UserRole role,
+            @RequestParam(required = false) UserStatus status,
+            @RequestParam(required = false) String q,
+            @RequestParam(required = false) Integer page,
+            @RequestParam(required = false) Integer size) {
+        return ResponseEntity.ok(adminUserQueryService.list(role, status, q, page, size));
+    }
+
     @GetMapping("/admin/users/ward-problems")
     @PreAuthorize("hasAuthority('PERM_ASSIGN_WARD')")
     public ResponseEntity<WardProblemsResponse> wardProblems() {
