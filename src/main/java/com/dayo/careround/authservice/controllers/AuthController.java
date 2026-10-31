@@ -49,10 +49,11 @@ public class AuthController {
             @AuthenticationPrincipal CareRoundPrincipal principal) {
         AuthUser creator = authUserRepository.findById(principal.userId())
                 .orElseThrow(InvalidCredentialsException::new);
-        authService.register(request, creator);
+        AuthUser created = authService.register(request, creator);
         return ResponseEntity.status(HttpStatus.CREATED).body(Map.of(
                 "message", "Account created. Activation email sent.",
-                "status", "PENDING_VERIFICATION"
+                "status", "PENDING_VERIFICATION",
+                "publicId", created.getPublicId().toString()
         ));
     }
 

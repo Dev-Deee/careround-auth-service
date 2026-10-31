@@ -89,7 +89,7 @@ public class AuthService {
     // ---------------------------------------------------------------
 
     @Transactional
-    public void register(RegisterRequest request, AuthUser creator) {
+    public AuthUser register(RegisterRequest request, AuthUser creator) {
 
         if (request.role() == UserRole.ADMIN) {
             if (!creator.getPermissions().contains(AdminPermission.GRANT_PERMISSIONS)) {
@@ -131,6 +131,7 @@ public class AuthService {
         AuthUser newUser = AuthMapper.toAuthUser(request);
         authUserRepository.save(newUser);
         issueRegistrationVerification(newUser, request);
+        return newUser;
     }
 
     // ---------------------------------------------------------------
