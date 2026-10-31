@@ -109,8 +109,12 @@ public class AuthService {
         if (authUserRepository.existsByPhoneNumber(request.phoneNumber())) {
             throw new UserAlreadyExistsException("Phone number already registered");
         }
-        if ((request.role() == UserRole.DOCTOR || request.role() == UserRole.NURSE)
-                && licenseVerificationClient.licenseNumberExists(request.licenseNumber())) {
+        boolean clinical = request.role() == UserRole.DOCTOR || request.role() == UserRole.NURSE;
+        // Checked before the gRPC call: a null license number cannot be put on the proto and surfaced as a 500.
+        if (clinical && (request.licenseNumber() == null || request.licenseNumber().isBlank())) {
+            throw new LicenseNumberRequiredException("licenseNumber is required for " + request.role() + " accounts");
+        }
+        if (clinical && licenseVerificationClient.licenseNumberExists(request.licenseNumber())) {
             throw new UserAlreadyExistsException("This license number is already registered");
         }
 

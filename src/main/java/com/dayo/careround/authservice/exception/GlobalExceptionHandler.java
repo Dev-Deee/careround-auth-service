@@ -1,5 +1,6 @@
 package com.dayo.careround.authservice.exception;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
@@ -14,6 +15,7 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
@@ -50,6 +52,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(InvalidVerificationTokenException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidVerificationToken(InvalidVerificationTokenException ex) {
         return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
+    }
+
+    @ExceptionHandler(LicenseNumberRequiredException.class)
+    public ResponseEntity<Map<String, Object>> handleLicenseNumberRequired(LicenseNumberRequiredException ex) {
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
     @ExceptionHandler(InvalidStateException.class)
@@ -98,6 +105,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleGeneral(Exception ex) {
+        // Logged with the stack trace so unexpected failures are visible; the client still gets only the generic body.
+        log.error("Unhandled exception: {}", ex.toString(), ex);
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred");
     }
 
