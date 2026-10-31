@@ -1,12 +1,12 @@
 package com.dayo.careround.authservice.controllers;
 
 import com.dayo.careround.authservice.data.models.AuthUser;
-import com.dayo.careround.authservice.data.models.OutboxEvent;
 import com.dayo.careround.authservice.data.models.enums.OutboxStatus;
 import com.dayo.careround.authservice.data.repositories.AuthUserRepository;
 import com.dayo.careround.authservice.data.repositories.OutboxEventRepository;
 import com.dayo.careround.authservice.dto.request.*;
 import com.dayo.careround.authservice.dto.response.AuthResponse;
+import com.dayo.careround.authservice.dto.response.OutboxDeadLetterResponse;
 import com.dayo.careround.authservice.dto.response.WardAssignmentResponse;
 import com.dayo.careround.authservice.dto.response.WardProblemsResponse;
 import com.dayo.careround.authservice.exception.InvalidCredentialsException;
@@ -101,10 +101,13 @@ public class AuthController {
         authService.confirmEmailChange(request.token());
         return ResponseEntity.noContent().build();
     }
+    // No payload in the response: it carries personal data (names, emails, licence numbers).
     @GetMapping("/admin/outbox/dead-letters")
-    @PreAuthorize("hasAuthority('PERM_VIEW_AUDIT_LOGS')")
-    public ResponseEntity<List<OutboxEvent>> listDeadLetters() {
-        return ResponseEntity.ok(outboxEventRepository.findByStatus(OutboxStatus.DEAD_LETTER));
+    @PreAuthorize("hasRole('ADMIN') and hasAuthority('PERM_VIEW_AUDIT_LOGS')")
+    public ResponseEntity<List<OutboxDeadLetterResponse>> listDeadLetters() {
+        return ResponseEntity.ok(outboxEventRepository.findByStatus(OutboxStatus.DEAD_LETTER).stream()
+                .map(OutboxDeadLetterResponse::from)
+                .toList());
     }
 
     @PostMapping("/admin/outbox/{id}/retry")
