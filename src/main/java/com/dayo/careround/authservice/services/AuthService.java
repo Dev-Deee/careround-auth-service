@@ -16,6 +16,7 @@ import com.dayo.careround.authservice.exception.*;
 import com.dayo.careround.authservice.grpc.LicenseVerificationClient;
 import com.dayo.careround.authservice.grpc.WardVerificationClient;
 import com.dayo.careround.authservice.utils.AuthMapper;
+import com.dayo.careround.authservice.utils.GradeValidator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -111,6 +112,8 @@ public class AuthService {
         if (authUserRepository.existsByPhoneNumber(request.phoneNumber())) {
             throw new UserAlreadyExistsException("Phone number already registered");
         }
+        GradeValidator.validate(request.role(), request.grade());
+
         boolean clinical = request.role() == UserRole.DOCTOR || request.role() == UserRole.NURSE;
         // Checked before the gRPC call: a null license number cannot be put on the proto and surfaced as a 500.
         if (clinical && (request.licenseNumber() == null || request.licenseNumber().isBlank())) {
