@@ -32,6 +32,8 @@ public class SecurityConfig {
                                 "/api/v1/auth/login",
                                 "/api/v1/auth/refresh",
                                 "/api/v1/auth/activate-account",
+                                // The single-use EMAIL_CHANGE token in the emailed link is the proof (FR-13.6), like activation.
+                                "/api/v1/auth/confirm-email-change",
                                 "/actuator/health",
                                 "/swagger-ui/**",
                                 "/v3/api-docs/**"
