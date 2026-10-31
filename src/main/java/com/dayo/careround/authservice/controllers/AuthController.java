@@ -7,10 +7,13 @@ import com.dayo.careround.authservice.data.repositories.AuthUserRepository;
 import com.dayo.careround.authservice.data.repositories.OutboxEventRepository;
 import com.dayo.careround.authservice.dto.request.*;
 import com.dayo.careround.authservice.dto.response.AuthResponse;
+import com.dayo.careround.authservice.dto.response.WardAssignmentResponse;
+import com.dayo.careround.authservice.dto.response.WardProblemsResponse;
 import com.dayo.careround.authservice.exception.InvalidCredentialsException;
 import com.dayo.careround.authservice.security.CareRoundPrincipal;
 import com.dayo.careround.authservice.services.AuthService;
 import com.dayo.careround.authservice.services.OutboxRecoveryService;
+import com.dayo.careround.authservice.services.WardAssignmentService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -32,6 +35,7 @@ public class AuthController {
     private final AuthUserRepository authUserRepository;
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxRecoveryService outboxRecoveryService;
+    private final WardAssignmentService wardAssignmentService;
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponse> login(@Valid @RequestBody LoginRequest request) {
@@ -108,6 +112,23 @@ public class AuthController {
     public ResponseEntity<Void> retryDeadLetter(@PathVariable UUID id) {
         outboxRecoveryService.retryDeadLetter(id);
         return ResponseEntity.noContent().build();
+    }
+
+    // Existing access tokens keep the old ward claim until they expire (<= 15 min); login/refresh read the new one.
+    @PutMapping("/admin/users/{userId}/ward")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_WARD')")
+    public ResponseEntity<WardAssignmentResponse> assignWard(
+            @PathVariable UUID userId,
+            @Valid @RequestBody AssignWardRequest request,
+            @AuthenticationPrincipal CareRoundPrincipal principal) {
+        return ResponseEntity.ok(wardAssignmentService.assignWard(userId, request.wardId(), principal.userId()));
+    }
+
+    // DOCTOR/NURSE accounts with no ward or a ward ward-service does not know; capped at WARD_PROBLEMS_CAP.
+    @GetMapping("/admin/users/ward-problems")
+    @PreAuthorize("hasAuthority('PERM_ASSIGN_WARD')")
+    public ResponseEntity<WardProblemsResponse> wardProblems() {
+        return ResponseEntity.ok(wardAssignmentService.findWardProblems());
     }
 
     @DeleteMapping("/admin/pending-account/{userId}")

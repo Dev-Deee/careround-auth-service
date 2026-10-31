@@ -4,6 +4,8 @@ import com.dayo.careround.authservice.data.models.AuthUser;
 import com.dayo.careround.authservice.data.models.enums.UserRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -14,4 +16,5 @@ public interface AuthUserRepository extends JpaRepository<AuthUser, UUID> {
     boolean existsByEmail(String email);
     boolean existsByPhoneNumber(String phoneNumber);
     boolean existsByRole(UserRole role);
+    List<AuthUser> findByRoleIn(Collection<UserRole> roles);
 }

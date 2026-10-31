@@ -9,6 +9,21 @@ notification-service), DB `careround_auth_db`, Redis for activation tokens.
   link to a set-password page (`GET /api/v1/auth/activate-account?token=…`, form POST to the same path).
 - `assignedWardId` is verified with ward-service (`WardExists`) when an account is created.
 
+## Admin: ward reassignment
+
+`assignedWardId` is the JWT ward claim that authorises ward-scoped access (alert replay, realtime subscriptions).
+
+| Endpoint | Permission | |
+|---|---|---|
+| `PUT /api/v1/auth/admin/users/{userId}/ward` body `{"wardId": "<ward publicId>"}` | `PERM_ASSIGN_WARD` | DOCTOR/NURSE only (else 400). Ward verified with ward-service: unknown 404, unreachable 503. Unknown user 404. Returns `userId, role, email, previousWardId, assignedWardId, note` |
+| `GET /api/v1/auth/admin/users/ward-problems` | `PERM_ASSIGN_WARD` | DOCTOR/NURSE accounts whose ward is `MISSING` or `UNKNOWN_WARD` (one `WardExists` per distinct ward id). Returns `{total, cap, items[]}`; at most **500** items |
+
+- **Tokens:** access tokens issued before a reassignment keep the old `assignedWardId` until they expire (at most
+  15 minutes). The next login or refresh reads the new ward.
+- **Audit:** auth-service has no audit table; each change is logged at INFO as
+  `AUDIT ward reassignment: userId=… role=… from=<old> to=<new> by=<admin userId>`.
+- `userId` is the account id (the JWT `sub`).
+
 ## Environment variables
 
 Copy `.env.example` to `.env` (gitignored, never committed) and fill in real values; plain environment variables work too. Names only:
@@ -21,6 +36,10 @@ Copy `.env.example` to `.env` (gitignored, never committed) and fill in real val
 | `USER_SERVICE_URL` | user-service base URL |
 | `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PHONE`, `SEED_ADMIN_PASSWORD` | the super-admin created on first start |
 | `ACTIVATION_BASE_URL` | base of the activation link in emails. Default `http://localhost:8081/api/v1/auth/activate-account`. Set it to the **gateway**, `http://localhost:8080/api/v1/auth/activate-account`, so users open the page through the single entry point (the page's form posts back to the same path) |
+
+## Postman
+
+`postman/CareRound-AuthAdmin.*`: ward reassignment and ward-problems (see `postman/README.md`).
 
 ## Run
 
