@@ -24,6 +24,18 @@ notification-service), DB `careround_auth_db`, Redis for activation tokens.
   `AUDIT ward reassignment: userId=… role=… from=<old> to=<new> by=<admin userId>`.
 - `userId` is the account id (the JWT `sub`).
 
+## Admin: user list
+
+`GET /api/v1/auth/admin/users?role&status&q&page&size` — any ADMIN (no specific permission). `role`
+(`DOCTOR`/`NURSE`/`ADMIN`), `status` (`PENDING_VERIFICATION`/`ACTIVE`/`INACTIVE`/`SUSPENDED`) and `q` are optional;
+`q` matches part of the email (case-insensitive) or the start of the phone number. Newest `createdAt` first;
+`page` 0-based, `size` 20 (max 100); `{items, page, size, total}`. Items: `id` (internal user id = JWT `sub`, the
+id other services store for staff), `publicId`, `email`, `phoneNumber`, `role`, `grade`, `status`,
+`assignedWardId`, `permissions`, `createdAt`. Names are not here; they live in user-service
+(`GET /api/v1/users/directory?ids=`).
+
+PRD `GET /admin/staff` → built `GET /api/v1/auth/admin/users` (account side) + user-service directory (names).
+
 ## Errors
 
 Every error uses the body `{"status", "error", "message", "timestamp"}`.
