@@ -14,6 +14,7 @@ import com.dayo.careround.authservice.dto.request.*;
 import com.dayo.careround.authservice.dto.response.AuthResponse;
 import com.dayo.careround.authservice.exception.*;
 import com.dayo.careround.authservice.grpc.LicenseVerificationClient;
+import com.dayo.careround.authservice.grpc.WardVerificationClient;
 import com.dayo.careround.authservice.utils.AuthMapper;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.transaction.Transactional;
@@ -48,6 +49,7 @@ public class AuthService {
     private final BCryptPasswordEncoder passwordEncoder;
     private final StringRedisTemplate redisTemplate;
     private final LicenseVerificationClient licenseVerificationClient;
+    private final WardVerificationClient wardVerificationClient;
     private final ObjectMapper objectMapper;
 
 
@@ -116,6 +118,11 @@ public class AuthService {
         }
         if (clinical && licenseVerificationClient.licenseNumberExists(request.licenseNumber())) {
             throw new UserAlreadyExistsException("This license number is already registered");
+        }
+
+        // assignedWardId becomes the JWT ward claim; null is allowed (e.g. ADMINs).
+        if (request.assignedWardId() != null && !wardVerificationClient.wardExists(request.assignedWardId())) {
+            throw new WardNotFoundException("No ward with that id");
         }
 
         AuthUser newUser = AuthMapper.toAuthUser(request);
