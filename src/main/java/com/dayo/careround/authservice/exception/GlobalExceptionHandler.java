@@ -54,6 +54,11 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.UNAUTHORIZED, ex.getMessage());
     }
 
+    @ExceptionHandler(InvalidWardAssignmentException.class)
+    public ResponseEntity<Map<String, Object>> handleInvalidWardAssignment(InvalidWardAssignmentException ex) {
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidGradeException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidGrade(InvalidGradeException ex) {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
