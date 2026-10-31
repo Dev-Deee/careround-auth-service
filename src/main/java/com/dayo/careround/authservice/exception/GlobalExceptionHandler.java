@@ -59,9 +59,19 @@ public class GlobalExceptionHandler {
         return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage());
     }
 
+    @ExceptionHandler(DownstreamServiceUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleDownstreamUnavailable(DownstreamServiceUnavailableException ex) {
+        return buildResponse(HttpStatus.SERVICE_UNAVAILABLE, ex.getMessage());
+    }
+
     @ExceptionHandler(InvalidStateException.class)
     public ResponseEntity<Map<String, Object>> handleInvalidState(InvalidStateException ex) {
         return buildResponse(HttpStatus.CONFLICT, ex.getMessage());
+    }
+
+    @ExceptionHandler(WardNotFoundException.class)
+    public ResponseEntity<Map<String, Object>> handleWardNotFound(WardNotFoundException ex) {
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage());
     }
 
     @ExceptionHandler(UserNotFoundException.class)
