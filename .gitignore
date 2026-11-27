@@ -32,5 +32,6 @@ build/
 ### VS Code ###
 src/main/resources/keys/
 
-config.bat
 node_modules
+.vscode/
+.env
